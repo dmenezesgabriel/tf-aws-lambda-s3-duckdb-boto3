@@ -80,8 +80,7 @@ def kaggle_to_s3():
             'runtimeMinutes': 'VARCHAR(2)',
             'genres': 'VARCHAR(60)'
         }
-    )
-    LIMIT 100000;
+    );
 
     COPY titles TO 'data/titles'(
         FORMAT PARQUET,

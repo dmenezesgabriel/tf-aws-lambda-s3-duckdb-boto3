@@ -72,9 +72,13 @@ resource "aws_lambda_function" "lambda_function" {
   layers           = [aws_lambda_layer_version.lambda_layer.arn]
   role             = aws_iam_role.iam_for_lambda.arn
   runtime          = "python3.11"
-  memory_size      = 256
+  memory_size      = 3008
   timeout          = 15
   source_code_hash = data.archive_file.lambda_function.output_base64sha256
+
+  ephemeral_storage {
+    size = 2048
+  }
 
   environment {
     variables = {

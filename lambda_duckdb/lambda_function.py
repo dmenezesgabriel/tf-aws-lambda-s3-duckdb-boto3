@@ -39,7 +39,6 @@ def run_query(
     result = conn.sql(query)
     records = result.fetchall()
     column_names = result.columns
-    logging.info("Query succeed")
     return [
         {column_names[index]: row[index] for index in range(len(column_names))}
         for row in records
@@ -47,12 +46,15 @@ def run_query(
 
 
 def create_future_downloads(bucket: str, prefix: str) -> List[Future]:
+    session = boto3.Session()
     executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
-    bucket_resource = boto3.resource("s3").Bucket(bucket)
+    bucket_resource = session.resource("s3").Bucket(bucket)
     client_config = botocore.config.Config(
         max_pool_connections=MAX_POOL_CONNECTIONS
     )
-    client = boto3.client("s3", region_name=REGION_NAME, config=client_config)
+    client = session.client(
+        "s3", region_name=REGION_NAME, config=client_config
+    )
 
     futures = []
     for obj in bucket_resource.objects.all():
