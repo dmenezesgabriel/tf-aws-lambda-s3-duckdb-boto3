@@ -40,8 +40,14 @@ def lambda_handler(event, context):
             FROM read_parquet('{prefix_path}/*.parquet')
             """
         )
-    result = conn.sql(query).fetchall()
-    return {"result": json.dumps(result)}
+    result = conn.sql(query)
+    records = result.fetchall()
+    column_names = result.columns
+    list_of_dicts = [
+        {column_names[i]: row[i] for i in range(len(column_names))}
+        for row in records
+    ]
+    return {"result": json.dumps(list_of_dicts)}
 
 
 if __name__ == "__main__":

@@ -79,8 +79,8 @@ def kaggle_to_s3():
             'runtimeMinutes': 'VARCHAR(2)',
             'genres': 'VARCHAR(60)'
         }
-    );
-
+    )
+    LIMIT 100000;
 
     COPY titles TO 'data/titles'(
         FORMAT PARQUET,
@@ -97,16 +97,4 @@ def kaggle_to_s3():
 
 
 if __name__ == "__main__":
-    # kaggle_to_s3()
-    s3 = boto3.client("s3")
-    bucket = "duckdb-bench-bucket"
-    prefix = "titles/"
-
-    # List objects in the bucket with the specified prefix
-    paginator = s3.get_paginator("list_objects_v2")
-    pages = paginator.paginate(Bucket=bucket, Prefix=prefix)
-
-    paths = []
-    for page in pages:
-        for obj in page.get("Contents", []):
-            print(obj["Key"])
+    kaggle_to_s3()
