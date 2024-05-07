@@ -62,6 +62,7 @@ def kaggle_to_s3():
     SELECT
     primaryTitle,
     originalTitle,
+    isAdult,
     startYear,
     endYear,
     runtimeMinutes,
@@ -84,14 +85,13 @@ def kaggle_to_s3():
 
     COPY titles TO 'data/titles'(
         FORMAT PARQUET,
-        PARTITION_BY (startYear),
+        PARTITION_BY (isAdult),
         OVERWRITE_OR_IGNORE,
-        FILENAME_PATTERN "titles_{i}"
+        FILENAME_PATTERN "titles_{uuid}"
     );
     """
 
-    if not os.path.isdir(titles_data):
-        conn.execute(SQL_TITLES_PARTITIONS)
+    conn.execute(SQL_TITLES_PARTITIONS)
 
     upload_parquet_files_to_s3(data_dir, AWS_BUCKET, "titles")
 

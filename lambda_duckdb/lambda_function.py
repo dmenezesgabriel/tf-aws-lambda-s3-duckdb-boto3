@@ -1,38 +1,70 @@
 import json
+import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 import boto3
+import botocore
 import duckdb
+
+logger = logging.getLogger()
+logger.setLevel("INFO")
+
+REGION_NAME = os.getenv("REGION_NAME")
+MAX_POOL_CONNECTIONS = 50
+MAX_WORKERS = 10
+TMP_DIR = "/tmp"
 
 
 def lambda_handler(event, context):
+    logging.info("starting lambda")
+
     if "datasets" not in event or "query" not in event:
+        logger.error("Invalid input: 'datasets' and 'query' are required")
         return {"error": "Invalid input: 'datasets' and 'query' are required"}
 
     datasets = event["datasets"]
     query = event["query"]
 
-    tmp_dir = "/tmp"
+    logging.info("Setup")
+    client_config = botocore.config.Config(
+        max_pool_connections=MAX_POOL_CONNECTIONS
+    )
+    client = boto3.client("s3", region_name=REGION_NAME, config=client_config)
 
-    client = boto3.client("s3")
-    paginator = client.get_paginator("list_objects_v2")
-    conn = duckdb.connect()
+    conn = duckdb.connect(":memory:")
+    executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
 
+    logging.info("Iterate")
     for dataset in datasets:
         bucket = dataset["bucket"]
         prefix = dataset["prefix"]
-        pages = paginator.paginate(Bucket=bucket, Prefix=prefix)
-        for page in pages:
-            for index, obj in enumerate(page.get("Contents", [])):
-                key = obj["Key"]
-                if not key.endswith(".parquet"):
-                    continue
-                prefix_path = os.path.join(tmp_dir, prefix)
-                if not os.path.isdir(prefix_path):
-                    os.makedirs(prefix_path)
-                file_name = os.path.basename(key)
-                tmp_file_path = os.path.join(tmp_dir, prefix, file_name)
-                client.download_file(bucket, key, tmp_file_path)
+        bucket_resource = boto3.resource("s3").Bucket(bucket)
+
+        prefix_path = os.path.join(TMP_DIR, prefix)
+        if not os.path.isdir(prefix_path):
+            os.makedirs(prefix_path)
+
+        futures = []
+        for obj in bucket_resource.objects.all():
+            key = obj.key
+            if not key.endswith(".parquet"):
+                continue
+            file_name = os.path.basename(key)
+            tmp_file_path = os.path.join(TMP_DIR, prefix, file_name)
+            futures.append(
+                executor.submit(
+                    client.download_file, bucket, key, tmp_file_path
+                )
+            )
+
+        logger.info("Starting downloads")
+        files_downloaded = all(
+            [future.result() for future in futures if future.result()]
+        )
+        logger.info(f"All files downloaded: {files_downloaded}")
+
+        logger.info("Reading files")
         conn.execute(
             f"""
             CREATE TABLE {prefix} AS
@@ -40,7 +72,9 @@ def lambda_handler(event, context):
             FROM read_parquet('{prefix_path}/*.parquet')
             """
         )
+    logging.info("Run query")
     result = conn.sql(query)
+    logging.info("Query finished")
     records = result.fetchall()
     column_names = result.columns
     list_of_dicts = [
