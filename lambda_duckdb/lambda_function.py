@@ -16,6 +16,24 @@ MAX_WORKERS = 10
 TMP_DIR = "/tmp"
 
 
+def create_download_path(prefix: str) -> str:
+    prefix_path = os.path.join(TMP_DIR, prefix)
+    if not os.path.isdir(prefix_path):
+        os.makedirs(prefix_path)
+    return prefix_path
+
+
+def create_table(conn: duckdb.DuckDBPyConnection, prefix: str) -> None:
+    prefix_path = create_download_path(prefix)
+    conn.execute(
+        f"""
+            CREATE TABLE {prefix} AS
+            SELECT *
+            FROM read_parquet('{prefix_path}/*.parquet')
+            """
+    )
+
+
 def lambda_handler(event, context):
     logging.info("starting lambda")
 
@@ -64,14 +82,8 @@ def lambda_handler(event, context):
         )
         logger.info(f"All files downloaded: {files_downloaded}")
 
-        logger.info("Reading files")
-        conn.execute(
-            f"""
-            CREATE TABLE {prefix} AS
-            SELECT *
-            FROM read_parquet('{prefix_path}/*.parquet')
-            """
-        )
+        create_table(conn, prefix)
+
     logging.info("Run query")
     result = conn.sql(query)
     logging.info("Query finished")
